@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test API key</title>
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; max-width: 640px; margin: 24px auto; padding: 0 16px; }
+  label { display: block; margin-top: 12px; font-size: 13px; color: #555; }
+  input, textarea, button { font: inherit; width: 100%; box-sizing: border-box; padding: 8px; margin-top: 4px; }
+  textarea { min-height: 80px; }
+  button { margin-top: 12px; cursor: pointer; }
+  #out { white-space: pre-wrap; background: #f3f3f3; padding: 10px; margin-top: 12px; min-height: 40px; }
+  #info { font-size: 12px; color: #777; margin-top: 4px; }
+</style>
+</head>
+<body>
+  <h2>Test API key</h2>
+
+  <label>Base URL</label>
+  <input id="base">
+
+  <label>API key</label>
+  <input id="key" placeholder="sk-rnd-...">
+
+  <label>Model</label>
+  <input id="model" value="auto">
+
+  <label>Nội dung</label>
+  <textarea id="text">Xin chào, bạn là ai?</textarea>
+
+  <button id="send">Gửi</button>
+  <div id="out"></div>
+  <div id="info"></div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  $('base').value = location.origin + '/v1';
+  try { $('key').value = localStorage.getItem('testKey') || ''; } catch {}
+
+  $('send').onclick = async () => {
+    try { localStorage.setItem('testKey', $('key').value.trim()); } catch {}
+    $('send').disabled = true;
+    $('out').textContent = 'Đang gửi...';
+    $('info').textContent = '';
+    const start = Date.now();
+    try {
+      const res = await fetch($('base').value.replace(/\/$/, '') + '/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + $('key').value.trim() },
+        body: JSON.stringify({ model: $('model').value.trim() || 'auto', messages: [{ role: 'user', content: $('text').value }] }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(`Lỗi ${res.status}: ${data.error?.message || JSON.stringify(data)}`);
+      $('out').textContent = data.choices[0].message.content;
+      $('info').textContent = `API: ${data.provider || '-'} · Model: ${data.model} · ${((Date.now() - start) / 1000).toFixed(1)}s`;
+    } catch (err) {
+      $('out').textContent = err.message === 'Failed to fetch'
+        ? 'Không kết nối được server tại ' + $('base').value + '\n→ Server có đang chạy không? (chạy: npm start)\n→ Base URL có đúng không?'
+        : err.message;
+    }
+    $('send').disabled = false;
+  };
+</script>
+</body>
+</html>

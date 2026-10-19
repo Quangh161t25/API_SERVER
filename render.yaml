@@ -1,0 +1,27 @@
+# Cấu hình deploy lên Render.com (Blueprint)
+# Render > New > Blueprint > chọn repo này. Các giá trị "sync: false" sẽ được hỏi khi tạo.
+services:
+  - type: web
+    name: random-api-server
+    runtime: node
+    plan: free              # free: ngủ sau 15 phút không dùng. starter ($7/tháng): chạy 24/7
+    region: singapore       # gần Việt Nam nhất
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true        # push code lên GitHub là tự deploy lại
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: SPREADSHEET_ID
+        sync: false         # ID Google Sheet
+      - key: GOOGLE_CREDENTIALS_JSON
+        sync: false         # dán NGUYÊN nội dung file credentials/service-account.json
+      - key: ADMIN_API_KEY
+        generateValue: true # Render tự tạo chuỗi ngẫu nhiên, xem ở tab Environment
+      - key: DEFAULT_STRATEGY
+        value: random
+      - key: RATE_LIMIT_PER_MIN
+        value: "30"
+      - key: TTS_MODEL
+        value: gemini-3.8-flash-tts

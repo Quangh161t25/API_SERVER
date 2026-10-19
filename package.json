@@ -1,0 +1,18 @@
+{
+  "name": "random-api-server",
+  "version": "1.0.0",
+  "description": "Server gọi ngẫu nhiên nhiều API (OpenAI, Gemini, Claude, API tùy ý), lưu cấu hình và log vào Google Sheet",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "init-sheet": "node scripts/init-sheet.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "googleapis": "^144.0.0"
+  }
+}

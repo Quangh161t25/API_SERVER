@@ -1,0 +1,7 @@
+node_modules/
+.env
+credentials/
+data/
+api-server.zip
+*.tar.gz
+.claude/

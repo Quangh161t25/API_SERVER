@@ -1,0 +1,682 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API Server Admin</title>
+<style>
+  :root { --bg:#f5f6f8; --card:#fff; --text:#1d2330; --muted:#6b7280; --line:#e3e6eb; --accent:#2f4d8c; --ok:#18794e; --err:#c0392b; --warn:#a15c00; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#14161b; --card:#1d2027; --text:#e6e8ec; --muted:#9aa1ad; --line:#2d313a; --accent:#7ea2e8; --ok:#4cc38a; --err:#ff7b6b; --warn:#f0b35a; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 system-ui, "Segoe UI", sans-serif; background:var(--bg); color:var(--text); }
+  main { max-width:1200px; margin:0 auto; padding:16px; }
+  h1 { font-size:20px; margin:8px 0 16px; }
+  h2 { font-size:15px; margin:0; }
+  a { color:var(--accent); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:14px; margin-bottom:14px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .between { justify-content:space-between; margin-bottom:10px; }
+  input, select, textarea { font:inherit; color:inherit; background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:7px 9px; }
+  textarea { width:100%; min-height:80px; resize:vertical; }
+  button { font:inherit; background:var(--accent); color:#fff; border:0; border-radius:6px; padding:7px 14px; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  button.ghost { background:transparent; color:var(--accent); border:1px solid var(--line); }
+  button.small { padding:3px 9px; font-size:12px; }
+  button.danger { color:var(--err); }
+  pre { white-space:pre-wrap; word-break:break-word; background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:10px; margin:10px 0 0; max-height:360px; overflow:auto; }
+  .tbl { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); white-space:nowrap; vertical-align:middle; }
+  th { color:var(--muted); font-weight:600; }
+  .ok { color:var(--ok); } .err { color:var(--err); } .warn { color:var(--warn); } .muted { color:var(--muted); }
+  .msg { margin-left:4px; font-size:13px; }
+  .switch { position:relative; display:inline-block; width:36px; height:20px; }
+  .switch input { opacity:0; width:0; height:0; }
+  .switch span { position:absolute; inset:0; background:var(--line); border-radius:20px; cursor:pointer; transition:.15s; }
+  .switch span::before { content:""; position:absolute; width:14px; height:14px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.15s; }
+  .switch input:checked + span { background:var(--ok); }
+  .switch input:checked + span::before { transform:translateX(16px); }
+  dialog { border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--text); width:min(640px, calc(100% - 24px)); padding:18px; }
+  dialog::backdrop { background:rgba(0,0,0,.45); }
+  .form { display:grid; grid-template-columns:1fr 1fr; gap:10px 12px; }
+  .form label { display:block; font-size:12px; color:var(--muted); margin-bottom:3px; }
+  .form input, .form select, .form textarea { width:100%; }
+  .form .full { grid-column:1 / -1; }
+  .hint { font-size:12px; color:var(--muted); margin-top:2px; }
+  @media (max-width:600px) { .form { grid-template-columns:1fr; } }
+  .empty { padding:20px; text-align:center; color:var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Quản trị API Server <a href="/" style="font-size:13px;font-weight:400;margin-left:8px">← Về ứng dụng</a></h1>
+
+  <div class="card">
+    <div class="row">
+      <label>Admin key <input id="key" type="password" placeholder="ADMIN_API_KEY (nếu có)" size="28"></label>
+      <button class="ghost" onclick="saveKey()">Lưu</button>
+      <span id="status" class="muted"></span>
+    </div>
+  </div>
+
+  <!-- QUẢN LÝ API -->
+  <div class="card">
+    <div class="row between">
+      <h2>Danh sách API <span id="count" class="muted" style="font-weight:400"></span></h2>
+      <div class="row">
+        <a id="sheetLink" target="_blank" rel="noopener" class="muted" style="font-size:13px">Mở Google Sheet ↗</a>
+        <button class="ghost" onclick="reloadSheet()" title="Đọc lại dữ liệu từ Google Sheet">↻ Đọc lại sheet</button>
+        <button onclick="openForm()">＋ Thêm API</button>
+      </div>
+    </div>
+    <div id="sheetInfo" class="muted" style="font-size:12px;margin-bottom:8px"></div>
+    <div class="tbl"><table id="providers"></table></div>
+    <div id="testOut"></div>
+  </div>
+
+  <!-- API KEY CỦA TÔI -->
+  <div class="card">
+    <div class="row between">
+      <h2>🔑 API key của tôi <span id="keyCount" class="muted" style="font-weight:400"></span></h2>
+      <button onclick="openKeyForm()">＋ Tạo API key</button>
+    </div>
+    <div class="muted" style="font-size:12px;margin-bottom:8px">
+      Dùng key này ở server / app / tool khác. Chuẩn OpenAI:
+      <b>base_url</b> = <code id="baseUrl"></code> <button class="ghost small" onclick="copyText($('baseUrl').textContent, this)">Chép</button>
+      · <b>model</b> = <code>auto</code> (ngẫu nhiên tất cả API) hoặc tên model cụ thể.
+      <a href="#" onclick="showGuide();return false">Xem code mẫu</a>
+    </div>
+    <div class="tbl"><table id="keys"></table></div>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-bottom:10px">Gửi thử</h2>
+    <textarea id="prompt" placeholder="Nhập prompt...">Xin chào, giới thiệu ngắn về bạn</textarea>
+    <div class="row" style="margin-top:8px">
+      <label class="muted" style="font-size:12px">Cách chọn<br>
+        <select id="strategy">
+          <option value="random">random — ngẫu nhiên đều</option>
+          <option value="weighted">weighted — theo trọng số</option>
+          <option value="roundrobin">roundrobin — lần lượt</option>
+        </select></label>
+      <label class="muted" style="font-size:12px">API (key)<br>
+        <select id="pid" onchange="renderModelSelect()"><option value="">Tất cả API</option></select></label>
+      <label class="muted" style="font-size:12px">Model <span id="modelCount"></span><br>
+        <span class="row" style="gap:4px;flex-wrap:nowrap">
+          <input id="modelFilter" placeholder="lọc model..." size="12" oninput="renderModelSelect()">
+          <select id="pmodel" style="max-width:280px"><option value="">Mặc định của từng API</option></select>
+          <button class="ghost small" onclick="loadCatalog(true)" title="Hỏi lại hãng danh sách model">↻</button>
+        </span></label>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button onclick="send('/api/chat')">Gửi</button>
+      <button class="ghost" onclick="sendMany(5)" title="Gửi 5 lần liên tiếp để xem API nào được chọn">Gửi 5 lần &amp; đếm</button>
+      <button class="ghost" onclick="send('/api/compare')">So sánh tất cả API</button>
+      <span id="catalogMsg" class="muted" style="font-size:12px"></span>
+    </div>
+    <pre id="out" class="muted">Kết quả sẽ hiện ở đây</pre>
+  </div>
+
+  <div class="card">
+    <div class="row between"><h2>Log gần đây (từ sheet LOG)</h2><button class="ghost" onclick="loadLogs()">Làm mới</button></div>
+    <div class="tbl"><table id="logs"></table></div>
+  </div>
+</main>
+
+<!-- FORM THÊM / SỬA -->
+<dialog id="dlg">
+  <form id="pform" onsubmit="return false">
+    <div class="row between">
+      <h2 id="dlgTitle">Thêm API</h2>
+      <select id="tpl" title="Điền nhanh theo mẫu">
+        <option value="">— Điền nhanh theo mẫu —</option>
+      </select>
+    </div>
+    <div class="form">
+      <div><label>ID (mã duy nhất)</label><input name="id" placeholder="để trống = tự tạo, vd gemini-2"><div class="hint">Chữ không dấu, số, - _ .</div></div>
+      <div><label>Tên hiển thị</label><input name="name" placeholder="Google Gemini 2"></div>
+      <div><label>Loại (type)</label><select name="type" id="ftype"></select></div>
+      <div><label>Model</label>
+        <div class="row" style="flex-wrap:nowrap"><input name="model" list="modelList" placeholder="để trống = mặc định" autocomplete="off">
+        <button type="button" class="ghost small" id="btnModels" onclick="loadModels()" title="Hỏi hãng xem key dùng được model nào" style="white-space:nowrap">Lấy DS</button></div>
+        <datalist id="modelList"></datalist>
+        <div class="hint" id="modelHint"></div></div>
+      <div class="full"><label>API key</label><input name="api_key" type="password" autocomplete="off" placeholder="Dán key của hãng vào đây">
+        <div class="hint" id="keyHint"></div></div>
+      <div class="full"><label>URL</label><input name="url" placeholder="để trống = URL mặc định của hãng"></div>
+      <div><label>Trọng số (weight)</label><input name="weight" type="number" min="0.1" step="0.1" placeholder="1"></div>
+      <div><label>Timeout (ms)</label><input name="timeout_ms" type="number" min="1000" step="1000" placeholder="30000"></div>
+      <div class="full adv"><label>Method</label><select name="method"><option>POST</option><option>GET</option><option>PUT</option></select></div>
+      <div class="full adv"><label>Headers (JSON)</label><input name="headers" placeholder='{"Authorization":"Bearer {{api_key}}"}'></div>
+      <div class="full adv"><label>Body template (JSON)</label><textarea name="body_template" style="min-height:60px" placeholder='{"question":"{{prompt}}"}'></textarea>
+        <div class="hint">Biến: {{prompt}} {{history}} {{system}} {{model}} {{api_key}}</div></div>
+      <div class="full adv"><label>Response path</label><input name="response_path" placeholder="data.answer hoặc choices[0].message.content"></div>
+      <div class="full"><label>Ghi chú</label><input name="note"></div>
+      <div class="full"><label style="display:flex;gap:8px;align-items:center;color:var(--text)"><input type="checkbox" name="enabled" checked style="width:auto"> Bật (enabled)</label></div>
+    </div>
+    <div class="row" style="justify-content:flex-end;margin-top:14px">
+      <span id="formErr" class="err" style="margin-right:auto"></span>
+      <button type="button" class="ghost" onclick="dlg.close()">Hủy</button>
+      <button type="button" id="saveBtn" onclick="saveForm()">Lưu vào sheet</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- FORM TẠO / SỬA KEY -->
+<dialog id="keyDlg">
+  <form id="kform" onsubmit="return false">
+    <h2 id="keyDlgTitle" style="margin-bottom:12px">Tạo API key</h2>
+    <div class="form">
+      <div class="full"><label>Tên key (để nhớ key dùng ở đâu)</label><input name="name" placeholder="Vd: Server bot Telegram"></div>
+      <div><label>Giới hạn request / phút</label><input name="rate_per_min" type="number" min="1" placeholder="trống = mặc định"></div>
+      <div><label>Giới hạn request / ngày</label><input name="daily_limit" type="number" min="1" placeholder="trống = không giới hạn"></div>
+      <div class="full"><label>Chỉ được dùng các API (bỏ trống = tất cả)</label><div id="kProviders" class="row" style="gap:12px"></div></div>
+      <div class="full"><label>Chỉ được dùng các model (bỏ trống = tất cả)</label>
+        <div class="row" style="flex-wrap:nowrap;gap:6px">
+          <input name="allowed_models" placeholder="vd: gemini-3.8-flash, gemini-3.1-flash-lite" style="flex:1">
+          <select id="kModelPick" style="max-width:200px" onchange="addModel(this)"><option value="">+ thêm model</option></select>
+        </div></div>
+      <div><label>Hết hạn ngày</label><input name="expires_at" type="date"></div>
+      <div><label>Ghi chú</label><input name="note"></div>
+      <div class="full"><label style="display:flex;gap:8px;align-items:center;color:var(--text)"><input type="checkbox" name="enabled" checked style="width:auto"> Đang bật</label></div>
+    </div>
+    <div class="row" style="justify-content:flex-end;margin-top:14px">
+      <span id="kErr" class="err" style="margin-right:auto"></span>
+      <button type="button" class="ghost" onclick="$('keyDlg').close()">Hủy</button>
+      <button type="button" id="kSave" onclick="saveKeyForm()">Lưu</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- HIỆN KEY MỚI + CODE MẪU -->
+<dialog id="guideDlg" style="width:min(760px, calc(100% - 24px))">
+  <div id="newKeyBox" style="display:none">
+    <h2 style="margin-bottom:6px">✅ Đã tạo API key</h2>
+    <div class="warn" style="font-size:13px;margin-bottom:8px">Chép và cất key này ngay. Server chỉ lưu mã băm nên <b>key sẽ không hiện lại lần nữa</b>.</div>
+    <div class="row" style="flex-wrap:nowrap">
+      <input id="newKey" readonly style="flex:1;font-family:monospace" onclick="this.select()">
+      <button onclick="copyText($('newKey').value, this)">Chép key</button>
+    </div>
+  </div>
+  <h2 id="guideTitle" style="margin:14px 0 6px">Code mẫu</h2>
+  <div class="row" id="guideTabs" style="gap:4px"></div>
+  <pre id="guideCode" style="max-height:420px"></pre>
+  <div class="row" style="justify-content:flex-end;margin-top:10px">
+    <button class="ghost" onclick="copyText($('guideCode').textContent, this)">Chép code</button>
+    <button onclick="$('guideDlg').close()">Đóng</button>
+  </div>
+</dialog>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const dlg = $('dlg');
+  try { $('key').value = localStorage.getItem('adminKey') || ''; } catch {}
+  function saveKey() { try { localStorage.setItem('adminKey', $('key').value); } catch {} refresh(); }
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+
+  async function api(path, opts = {}) {
+    let res;
+    try {
+      res = await fetch(path, { ...opts, headers: { 'Content-Type': 'application/json', 'x-api-key': $('key').value, ...(opts.headers || {}) } });
+    } catch { return { ok: false, status: 0, data: { error: 'Không kết nối được server. Server có đang chạy không?' } }; }
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401 || res.status === 403) $('status').innerHTML = '<span class="err">Sai admin key</span>';
+    return { ok: res.ok, status: res.status, data };
+  }
+
+  // ---------- Mẫu điền nhanh ----------
+  const TEMPLATES = {
+    gemini:     { label: 'Google Gemini', type: 'gemini', name: 'Google Gemini', model: 'gemini-3.8-flash', note: 'Key: aistudio.google.com' },
+    openai:     { label: 'OpenAI', type: 'openai', name: 'OpenAI', model: 'gpt-4o-mini', note: 'Key: platform.openai.com' },
+    claude:     { label: 'Anthropic Claude', type: 'claude', name: 'Claude', model: 'claude-haiku-5-5', note: 'Key: console.anthropic.com' },
+    groq:       { label: 'Groq', type: 'openai', name: 'Groq', url: 'https://api.groq.com/openai/v1/chat/completions', model: 'llama-3.3-70b-versatile', note: 'Key: console.groq.com' },
+    deepseek:   { label: 'DeepSeek', type: 'openai', name: 'DeepSeek', url: 'https://api.deepseek.com/chat/completions', model: 'deepseek-chat', note: 'Key: platform.deepseek.com' },
+    openrouter: { label: 'OpenRouter', type: 'openai', name: 'OpenRouter', url: 'https://openrouter.ai/api/v1/chat/completions', model: 'openai/gpt-4o-mini', note: 'Key: openrouter.ai' },
+    generic:    { label: 'API tùy ý (generic)', type: 'generic', name: 'API tùy ý', method: 'POST', headers: '{"Authorization":"Bearer {{api_key}}"}', body_template: '{"question":"{{prompt}}"}', response_path: 'data.answer' },
+    mock:       { label: 'Mock (test, không cần key)', type: 'mock', name: 'Mock test' },
+  };
+  $('tpl').innerHTML += Object.entries(TEMPLATES).map(([k, t]) => `<option value="${k}">${esc(t.label)}</option>`).join('');
+  $('tpl').onchange = () => {
+    const t = TEMPLATES[$('tpl').value]; if (!t) return;
+    const f = $('pform');
+    ['name', 'type', 'url', 'model', 'method', 'headers', 'body_template', 'response_path', 'note'].forEach((k) => { if (k in t || k !== 'type') f[k].value = t[k] ?? (k === 'method' ? 'POST' : ''); });
+    toggleAdv();
+  };
+
+  // ---------- Danh sách API ----------
+  let providers = [], statMap = {}, types = ['openai', 'gemini', 'claude', 'generic', 'mock'];
+
+  async function loadProviders() {
+    const [p, s] = await Promise.all([api('/api/providers'), api('/api/stats')]);
+    if (!p.ok) {
+      $('providers').innerHTML = `<tr><td class="err">${esc(p.data.error || 'Lỗi ' + p.status)}</td></tr>`;
+      return;
+    }
+    providers = p.data.providers; types = p.data.types || types;
+    statMap = Object.fromEntries((s.data || []).map((x) => [x.id, x]));
+    $('sheetLink').href = p.data.sheet_url;
+    $('count').textContent = `(${providers.length})`;
+    $('sheetInfo').innerHTML = p.data.lastError
+      ? `<span class="err">Lỗi đọc sheet: ${esc(p.data.lastError)}</span> — kiểm tra đã share sheet cho <b>${esc(p.data.service_account)}</b> quyền Người chỉnh sửa chưa.`
+      : `Đọc lúc ${p.data.lastLoaded ? new Date(p.data.lastLoaded).toLocaleTimeString('vi-VN') : '-'} · Sửa trực tiếp trên Google Sheet cũng được, server tự cập nhật sau tối đa 60 giây (hoặc bấm "Đọc lại sheet").`;
+    if (!providers.length) {
+      $('providers').innerHTML = `<tr><td class="empty">Chưa có API nào trong sheet. Bấm <b>＋ Thêm API</b> để thêm.</td></tr>`;
+      return;
+    }
+    const head = ['Bật', 'Thao tác', 'ID', 'Tên', 'Type', 'Model', 'API key', 'Trọng số', 'Trạng thái', 'Gọi / OK', 'Độ trễ TB', 'Lỗi gần nhất'];
+    $('providers').innerHTML = '<tr>' + head.map((h) => `<th>${h}</th>`).join('') + '</tr>' + providers.map((p) => {
+      const st = statMap[p.id] || {};
+      const state = !p.enabled ? '<span class="muted">Tắt</span>'
+        : st.cooldown_remaining_sec > 0 ? `<span class="warn">Tạm loại ${st.cooldown_remaining_sec}s</span>`
+        : '<span class="ok">Sẵn sàng</span>';
+      const keyCell = p.has_key ? `<code>${esc(p.api_key)}</code>` : (p.type === 'mock' ? '<span class="muted">không cần</span>' : '<span class="err">chưa có</span>');
+      return `<tr>
+        <td><label class="switch"><input type="checkbox" ${p.enabled ? 'checked' : ''} onchange="toggle('${esc(p.id)}', this)"><span></span></label></td>
+        <td>
+          <button class="ghost small" onclick="testProvider('${esc(p.id)}')">Test</button>
+          ${p.type === 'gemini' || p.type === 'mock' ? `<button class="ghost small" onclick="testProvider('${esc(p.id)}', true)" title="Test giọng đọc">Test TTS</button>` : ''}
+          <button class="ghost small" onclick="openForm('${esc(p.id)}')">Sửa</button>
+          <button class="ghost small danger" onclick="removeProvider('${esc(p.id)}')">Xóa</button>
+        </td>
+        <td><b>${esc(p.id)}</b></td>
+        <td>${esc(p.name)}</td>
+        <td>${esc(p.type)}</td>
+        <td>${esc(p.model || '-')}</td>
+        <td>${keyCell}</td>
+        <td>${esc(p.weight)}</td>
+        <td>${state}</td>
+        <td>${st.calls ?? 0} / ${st.success ?? 0}</td>
+        <td>${st.avg_latency_ms != null ? st.avg_latency_ms + 'ms' : '-'}</td>
+        <td class="err" title="${esc(st.last_error)}">${esc(String(st.last_error || '').slice(0, 40))}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  async function toggle(id, el) {
+    el.disabled = true;
+    const r = await api('/api/providers/' + encodeURIComponent(id), { method: 'PATCH', body: JSON.stringify({ enabled: el.checked ? 'TRUE' : 'FALSE' }) });
+    if (!r.ok) { alert(r.data.error || 'Lỗi'); el.checked = !el.checked; }
+    el.disabled = false;
+    loadProviders();
+  }
+
+  async function removeProvider(id) {
+    if (!confirm(`Xóa API "${id}" khỏi Google Sheet?\nDòng này sẽ bị xóa hẳn khỏi sheet.`)) return;
+    const r = await api('/api/providers/' + encodeURIComponent(id), { method: 'DELETE' });
+    if (!r.ok) alert(r.data.error || 'Lỗi');
+    loadProviders();
+  }
+
+  async function testProvider(id, tts = false) {
+    $('testOut').innerHTML = `<pre class="muted">Đang test ${esc(id)}${tts ? ' (giọng đọc)' : ''}...</pre>`;
+    const r = await api('/api/providers/' + encodeURIComponent(id) + '/test', { method: 'POST', body: JSON.stringify({ tts }) });
+    const d = r.data;
+    $('testOut').innerHTML = d.ok
+      ? `<pre><span class="ok">✓ ${esc(id)} hoạt động</span> · ${esc(d.model || '')} · ${d.latency_ms}ms\n\n${esc(d.text)}</pre>`
+      : `<pre><span class="err">✗ ${esc(id)} lỗi${d.status ? ' (HTTP ' + d.status + ')' : ''}</span>\n\n${esc(d.error || 'Lỗi')}${hintFor(d)}</pre>`;
+    loadProviders();
+  }
+  function hintFor(d) {
+    const e = String(d.error || '');
+    const sug = e.match(/use\s+models\/([\w.-]+)/i);
+    if (sug) return `\n\n→ Google đã ngừng model này. Bấm "Sửa", đổi Model thành: ${sug[1]}`;
+    if (/API key not valid|invalid_api_key|Incorrect API key|401|authentication/i.test(e)) return '\n\n→ Key sai hoặc hết hạn. Bấm "Sửa" để dán lại key.';
+    if (/429|quota|rate/i.test(e)) return '\n\n→ Hết hạn mức (quota) của key này. Đợi hoặc thêm key khác.';
+    if (/not found|404/i.test(e)) return '\n\n→ Sai tên model hoặc URL.';
+    return '';
+  }
+
+  // ---------- Form thêm / sửa ----------
+  let editing = null;
+  $('ftype').innerHTML = types.map((t) => `<option>${t}</option>`).join('');
+  $('ftype').onchange = toggleAdv;
+  function toggleAdv() {
+    const gen = $('ftype').value === 'generic';
+    document.querySelectorAll('.adv').forEach((el) => (el.style.display = gen ? '' : 'none'));
+  }
+
+  function openForm(id) {
+    const f = $('pform');
+    f.reset(); $('formErr').textContent = ''; $('tpl').value = ''; $('modelList').innerHTML = ''; $('modelHint').textContent = '';
+    $('ftype').innerHTML = types.map((t) => `<option>${t}</option>`).join('');
+    editing = id || null;
+    if (editing) {
+      const p = providers.find((x) => x.id === id);
+      const raw = p.raw || p;
+      $('dlgTitle').textContent = 'Sửa API: ' + id;
+      ['id', 'name', 'type', 'url', 'model', 'weight', 'timeout_ms', 'method', 'headers', 'body_template', 'response_path', 'note']
+        .forEach((k) => { if (f[k]) f[k].value = raw[k] ?? ''; });
+      f.type.value = p.type;
+      f.method.value = (raw.method || 'POST').toUpperCase();
+      f.enabled.checked = p.enabled;
+      f.id.disabled = true;
+      f.api_key.placeholder = p.has_key ? `Đang có key ${p.api_key} — để trống = giữ nguyên` : 'Chưa có key — dán key vào đây';
+      $('keyHint').textContent = p.has_key ? 'Chỉ nhập khi muốn đổi key.' : '';
+      $('tpl').style.display = 'none';
+    } else {
+      $('dlgTitle').textContent = 'Thêm API';
+      f.id.disabled = false;
+      f.type.value = 'gemini';
+      f.enabled.checked = true;
+      f.api_key.placeholder = 'Dán key của hãng vào đây';
+      $('keyHint').textContent = 'Key được lưu vào cột api_key của Google Sheet.';
+      $('tpl').style.display = '';
+    }
+    toggleAdv();
+    dlg.showModal();
+  }
+
+  async function loadModels() {
+    const f = $('pform');
+    const type = f.type.value;
+    if (!['gemini', 'openai', 'claude'].includes(type)) { $('modelHint').textContent = 'Chỉ hỗ trợ gemini / openai / claude'; return; }
+    $('btnModels').disabled = true; $('modelHint').textContent = 'Đang hỏi ' + type + '...';
+    const r = await api('/api/models', { method: 'POST', body: JSON.stringify({ type, url: f.url.value.trim(), api_key: f.api_key.value.trim(), provider_id: editing || undefined }) });
+    $('btnModels').disabled = false;
+    if (!r.ok) { $('modelHint').innerHTML = '<span class="err">' + esc(r.data.error || 'Lỗi') + '</span>'; return; }
+    const chat = r.data.models.filter((m) => !m.tts);
+    $('modelList').innerHTML = chat.map((m) => `<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('');
+    const tts = r.data.models.filter((m) => m.tts).map((m) => m.id);
+    $('modelHint').textContent = `Key dùng được ${chat.length} model. Bấm vào ô Model để chọn.` + (tts.length ? ` Giọng đọc đang dùng: ${r.data.tts_model}` : '');
+    f.model.focus();
+  }
+
+  async function saveForm() {
+    const f = $('pform');
+    const data = {};
+    ['id', 'name', 'type', 'url', 'model', 'api_key', 'weight', 'timeout_ms', 'headers', 'body_template', 'response_path', 'note']
+      .forEach((k) => (data[k] = f[k].value.trim()));
+    data.method = f.type.value === 'generic' ? f.method.value : '';
+    data.enabled = f.enabled.checked ? 'TRUE' : 'FALSE';
+    if (data.type !== 'mock' && !editing && !data.api_key && data.type !== 'generic') {
+      if (!confirm('Chưa nhập API key. Vẫn lưu?')) return;
+    }
+    $('saveBtn').disabled = true; $('formErr').textContent = '';
+    const r = editing
+      ? api('/api/providers/' + encodeURIComponent(editing), { method: 'PATCH', body: JSON.stringify((({ id, ...rest }) => rest)(data)) })
+      : api('/api/providers', { method: 'POST', body: JSON.stringify(data) });
+    const res = await r;
+    $('saveBtn').disabled = false;
+    if (!res.ok) { $('formErr').textContent = res.data.error || 'Lỗi ' + res.status; return; }
+    dlg.close();
+    $('status').innerHTML = `<span class="ok">Đã lưu "${esc(res.data.id)}" vào Google Sheet</span>`;
+    loadProviders(); loadCatalog();
+  }
+
+  async function reloadSheet() {
+    const r = await api('/api/reload', { method: 'POST' });
+    $('status').innerHTML = r.ok ? `<span class="ok">Đã đọc lại: ${r.data.count} API</span>` : `<span class="err">${esc(r.data.error || 'Lỗi')}</span>`;
+    loadProviders();
+  }
+
+  // ---------- Gửi thử ----------
+  let cat = { providers: [], models: [] };
+
+  async function loadCatalog(refresh = false) {
+    $('catalogMsg').textContent = refresh ? 'Đang hỏi lại danh sách model...' : '';
+    const r = await api('/api/catalog' + (refresh ? '?refresh=1' : ''));
+    if (!r.ok) { $('catalogMsg').textContent = r.data.error || 'Không tải được danh sách model'; return; }
+    cat = r.data;
+    const cur = $('pid').value;
+    $('pid').innerHTML = '<option value="">Tất cả API</option>' + cat.providers.filter((p) => p.enabled)
+      .map((p) => `<option value="${esc(p.id)}">${esc(p.id)} (${esc(p.type)}${p.model ? ' · ' + esc(p.model) : ''})</option>`).join('');
+    $('pid').value = cur;
+    const errs = cat.providers.filter((p) => p.error);
+    $('catalogMsg').innerHTML = errs.length ? '<span class="err">Không lấy được model của: ' + errs.map((p) => esc(p.id)).join(', ') + '</span>' : '';
+    renderModelSelect();
+  }
+
+  function renderModelSelect() {
+    const pid = $('pid').value;
+    const q = $('modelFilter').value.trim().toLowerCase();
+    const cur = $('pmodel').value;
+    let list = cat.models.filter((m) => !m.tts && (!pid || m.providers.includes(pid)) && (!q || m.id.toLowerCase().includes(q)));
+    const total = cat.models.filter((m) => !m.tts && (!pid || m.providers.includes(pid))).length;
+    $('modelCount').textContent = `(${list.length}/${total})`;
+    $('pmodel').innerHTML = '<option value="">Mặc định của từng API</option>' +
+      list.map((m) => `<option value="${esc(m.id)}">${esc(m.id)}${pid ? '' : ' — ' + m.providers.length + ' key'}</option>`).join('');
+    if (list.some((m) => m.id === cur)) $('pmodel').value = cur;
+    else if (list.length && q) $('pmodel').value = list[0].id;
+  }
+
+  function sendBody() {
+    const body = { messages: [{ role: 'user', content: $('prompt').value }], prompt: $('prompt').value, strategy: $('strategy').value };
+    if ($('pid').value) body.provider = $('pid').value;
+    if ($('pmodel').value) body.model = $('pmodel').value;
+    return body;
+  }
+
+  async function send(path) {
+    $('out').className = 'muted';
+    $('out').textContent = 'Đang gọi...';
+    const r = await api(path, { method: 'POST', body: JSON.stringify(sendBody()) });
+    $('out').className = r.ok ? '' : 'err';
+    $('out').textContent = JSON.stringify(r.data, null, 2);
+    loadProviders();
+    setTimeout(loadLogs, 4000);
+  }
+
+  /** Gửi nhiều lần để thấy random chọn API nào */
+  async function sendMany(n) {
+    const count = {};
+    $('out').className = '';
+    for (let i = 1; i <= n; i++) {
+      $('out').textContent = `Đang gửi lần ${i}/${n}...\n\n` + tally(count);
+      const r = await api('/api/chat', { method: 'POST', body: JSON.stringify(sendBody()) });
+      const k = r.ok ? `${r.data.provider.id} (${r.data.provider.model})` : 'LỖI: ' + (r.data.error || r.status);
+      count[k] = (count[k] || 0) + 1;
+    }
+    $('out').textContent = `Đã gửi ${n} lần, cách chọn "${$('strategy').value}":\n\n` + tally(count);
+    loadProviders();
+    setTimeout(loadLogs, 4000);
+  }
+  const tally = (c) => Object.entries(c).map(([k, v]) => `${k.padEnd(40)} ${'█'.repeat(v)} ${v}`).join('\n');
+
+  // ---------- Log ----------
+  async function loadLogs() {
+    const r = await api('/api/logs?limit=30');
+    if (!r.ok) { $('logs').innerHTML = `<tr><td class="err">${esc(r.data.error)}</td></tr>`; return; }
+    const cols = ['timestamp','request_id','endpoint','client_key','attempt','provider_id','model','status_code','success','latency_ms','prompt','response','error'];
+    $('logs').innerHTML = '<tr>' + cols.map((c) => `<th>${c}</th>`).join('') + '</tr>' +
+      r.data.map((l) => '<tr>' + cols.map((c) => {
+        const v = String(l[c] ?? '');
+        if (c === 'success') return `<td class="${v === 'TRUE' ? 'ok' : 'err'}">${esc(v)}</td>`;
+        return `<td title="${esc(v)}">${esc(v.slice(0, 50))}</td>`;
+      }).join('') + '</tr>').join('');
+  }
+
+  // ---------- API key của tôi ----------
+  let myKeys = [], baseUrl = location.origin + '/v1', editingKey = null;
+
+  async function copyText(t, btn) {
+    try { await navigator.clipboard.writeText(t); }
+    catch { const a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); document.execCommand('copy'); a.remove(); }
+    if (btn) { const o = btn.textContent; btn.textContent = 'Đã chép ✓'; setTimeout(() => (btn.textContent = o), 1200); }
+  }
+
+  async function loadKeys() {
+    const r = await api('/api/keys');
+    if (!r.ok) { $('keys').innerHTML = `<tr><td class="err">${esc(r.data.error || 'Lỗi')}</td></tr>`; return; }
+    myKeys = r.data.keys; baseUrl = r.data.base_url || baseUrl;
+    $('baseUrl').textContent = baseUrl;
+    $('keyCount').textContent = `(${myKeys.length})`;
+    if (!myKeys.length) {
+      $('keys').innerHTML = '<tr><td class="empty">Chưa có key nào. Bấm <b>＋ Tạo API key</b>. Khi đã có key, mọi request từ máy khác đều phải gửi key.</td></tr>';
+      return;
+    }
+    const head = ['Bật', 'Thao tác', 'Tên', 'Key', 'Hôm nay', 'Tổng', 'Giới hạn', 'Model được phép', 'API được phép', 'Hết hạn', 'Dùng lần cuối', 'Tạo lúc'];
+    $('keys').innerHTML = '<tr>' + head.map((x) => `<th>${x}</th>`).join('') + '</tr>' + myKeys.map((k) => `<tr>
+      <td><label class="switch"><input type="checkbox" ${k.enabled ? 'checked' : ''} onchange="toggleKey('${esc(k.id)}', this)"><span></span></label></td>
+      <td><button class="ghost small" onclick="openKeyForm('${esc(k.id)}')">Sửa</button>
+          <button class="ghost small danger" onclick="deleteKey('${esc(k.id)}')">Xóa</button></td>
+      <td><b>${esc(k.name)}</b>${k.note ? '<br><span class="muted">' + esc(k.note) + '</span>' : ''}</td>
+      <td><code>${esc(k.key_prefix)}</code></td>
+      <td>${k.today_requests}${k.daily_limit ? ' / ' + k.daily_limit : ''}</td>
+      <td>${k.total_requests}</td>
+      <td>${k.rate_per_min ? k.rate_per_min + '/phút' : '<span class="muted">mặc định</span>'}</td>
+      <td>${k.allowed_models.length ? esc(k.allowed_models.join(', ')) : '<span class="muted">tất cả</span>'}</td>
+      <td>${k.allowed_providers.length ? esc(k.allowed_providers.join(', ')) : '<span class="muted">tất cả</span>'}</td>
+      <td>${k.expires_at ? (k.expired ? '<span class="err">' + esc(k.expires_at) + ' (hết hạn)</span>' : esc(k.expires_at)) : '<span class="muted">không</span>'}</td>
+      <td>${esc(k.last_used || '-')}</td>
+      <td class="muted">${esc(k.created_at)}</td>
+    </tr>`).join('');
+  }
+
+  function openKeyForm(id) {
+    const f = $('kform'); f.reset(); $('kErr').textContent = '';
+    editingKey = id || null;
+    const k = id ? myKeys.find((x) => x.id === id) : null;
+    $('keyDlgTitle').textContent = k ? 'Sửa API key: ' + k.name : 'Tạo API key';
+    $('kSave').textContent = k ? 'Lưu' : 'Tạo key';
+    $('kProviders').innerHTML = providers.map((p) => `<label style="display:flex;gap:4px;align-items:center;color:var(--text);font-size:13px">
+      <input type="checkbox" value="${esc(p.id)}" style="width:auto" ${k && k.allowed_providers.includes(p.id) ? 'checked' : ''}> ${esc(p.id)}</label>`).join('') || '<span class="muted">Chưa có API nào</span>';
+    $('kModelPick').innerHTML = '<option value="">+ thêm model</option>' + (cat.models || []).filter((m) => !m.tts).map((m) => `<option>${esc(m.id)}</option>`).join('');
+    if (k) {
+      f.name.value = k.name; f.rate_per_min.value = k.rate_per_min || ''; f.daily_limit.value = k.daily_limit || '';
+      f.allowed_models.value = k.allowed_models.join(', '); f.expires_at.value = k.expires_at || ''; f.note.value = k.note || '';
+      f.enabled.checked = k.enabled;
+    }
+    $('keyDlg').showModal();
+    f.name.focus();
+  }
+
+  function addModel(sel) {
+    if (!sel.value) return;
+    const f = $('kform');
+    const cur = f.allowed_models.value.split(',').map((s) => s.trim()).filter(Boolean);
+    if (!cur.includes(sel.value)) cur.push(sel.value);
+    f.allowed_models.value = cur.join(', ');
+    sel.value = '';
+  }
+
+  async function saveKeyForm() {
+    const f = $('kform');
+    const data = {
+      name: f.name.value.trim(), rate_per_min: f.rate_per_min.value, daily_limit: f.daily_limit.value,
+      allowed_models: f.allowed_models.value, expires_at: f.expires_at.value, note: f.note.value,
+      enabled: f.enabled.checked ? 'TRUE' : 'FALSE',
+      allowed_providers: [...$('kProviders').querySelectorAll('input:checked')].map((i) => i.value).join(', '),
+    };
+    if (!data.name) { $('kErr').textContent = 'Nhập tên key'; f.name.focus(); return; }
+    $('kSave').disabled = true; $('kErr').textContent = '';
+    const r = editingKey
+      ? await api('/api/keys/' + encodeURIComponent(editingKey), { method: 'PATCH', body: JSON.stringify(data) })
+      : await api('/api/keys', { method: 'POST', body: JSON.stringify(data) });
+    $('kSave').disabled = false;
+    if (!r.ok) { $('kErr').textContent = r.data.error || 'Lỗi ' + r.status; return; }
+    $('keyDlg').close();
+    await loadKeys();
+    if (!editingKey) showGuide(r.data.key);
+  }
+
+  async function toggleKey(id, el) {
+    el.disabled = true;
+    const r = await api('/api/keys/' + encodeURIComponent(id), { method: 'PATCH', body: JSON.stringify({ enabled: el.checked ? 'TRUE' : 'FALSE' }) });
+    if (!r.ok) { alert(r.data.error || 'Lỗi'); el.checked = !el.checked; }
+    el.disabled = false;
+    loadKeys();
+  }
+
+  async function deleteKey(id) {
+    const k = myKeys.find((x) => x.id === id);
+    if (!confirm(`Xóa hẳn key "${k?.name || id}"?\nMọi nơi đang dùng key này sẽ bị từ chối ngay.\n(Muốn tạm dừng thì chỉ cần tắt công tắc.)`)) return;
+    const r = await api('/api/keys/' + encodeURIComponent(id), { method: 'DELETE' });
+    if (!r.ok) alert(r.data.error || 'Lỗi');
+    loadKeys();
+  }
+
+  // ---------- Code mẫu ----------
+  function snippets(key) {
+    const K = key || 'sk-rnd-...';
+    const B = baseUrl;
+    const BS = '\\';
+    return {
+      'Python': [
+        '# pip install openai',
+        'from openai import OpenAI',
+        '',
+        `client = OpenAI(base_url="${B}", api_key="${K}")`,
+        '',
+        'res = client.chat.completions.create(',
+        '    model="auto",   # auto = ngẫu nhiên tất cả API; hoặc "gemini-3.8-flash"',
+        '    messages=[',
+        '        {"role": "system", "content": "Bạn là trợ lý tiếng Việt"},',
+        '        {"role": "user", "content": "Xin chào"},',
+        '    ],',
+        ')',
+        'print(res.choices[0].message.content)',
+        'print("Model đã dùng:", res.model)',
+      ].join('\n'),
+      'Node.js': [
+        '// npm install openai',
+        'import OpenAI from "openai";',
+        '',
+        `const client = new OpenAI({ baseURL: "${B}", apiKey: "${K}" });`,
+        '',
+        'const res = await client.chat.completions.create({',
+        '  model: "auto", // hoặc "gemini-3.8-flash"',
+        '  messages: [{ role: "user", content: "Xin chào" }],',
+        '});',
+        'console.log(res.choices[0].message.content);',
+      ].join('\n'),
+      'curl': [
+        `curl ${B}/chat/completions ${BS}`,
+        `  -H "Authorization: Bearer ${K}" ${BS}`,
+        `  -H "Content-Type: application/json" ${BS}`,
+        `  -d '{"model":"auto","messages":[{"role":"user","content":"Xin chào"}]}'`,
+      ].join('\n'),
+      'Stream': [
+        'from openai import OpenAI',
+        `client = OpenAI(base_url="${B}", api_key="${K}")`,
+        '',
+        'stream = client.chat.completions.create(',
+        '    model="auto",',
+        '    messages=[{"role": "user", "content": "Kể chuyện ngắn"}],',
+        '    stream=True,',
+        ')',
+        'for chunk in stream:',
+        '    print(chunk.choices[0].delta.content or "", end="", flush=True)',
+      ].join('\n'),
+      'Giọng đọc': [
+        `curl ${B}/audio/speech ${BS}`,
+        `  -H "Authorization: Bearer ${K}" ${BS}`,
+        `  -H "Content-Type: application/json" ${BS}`,
+        `  -d '{"input":"Xin chào các bạn","voice":"Kore"}' ${BS}`,
+        '  --output giong-doc.wav',
+      ].join('\n'),
+      'Tool khác': [
+        'Dùng cho n8n, Dify, LangChain, Open WebUI, LobeChat, Cursor...',
+        '(chọn nhà cung cấp "OpenAI" hoặc "OpenAI compatible"):',
+        '',
+        `  Base URL / API Base :  ${B}`,
+        `  API Key             :  ${K}`,
+        `  Model               :  auto   (hoặc tên model, xem GET ${B}/models)`,
+        '',
+        'Tùy chọn thêm (header):',
+        '  X-Provider: gemini-1                      -> ép dùng 1 API',
+        '  X-Strategy: random | weighted | roundrobin',
+      ].join('\n'),
+    };
+  }
+
+  function showGuide(newKey) {
+    $('newKeyBox').style.display = newKey ? '' : 'none';
+    if (newKey) $('newKey').value = newKey;
+    $('guideTitle').textContent = newKey ? 'Cách dùng key này' : 'Code mẫu (thay sk-rnd-... bằng key của bạn)';
+    const sn = snippets(newKey);
+    const show = (name) => {
+      $('guideCode').textContent = sn[name];
+      $('guideTabs').querySelectorAll('button').forEach((b) => b.classList.toggle('ghost', b.dataset.n !== name));
+    };
+    $('guideTabs').innerHTML = Object.keys(sn).map((n) => `<button class="small ghost" data-n="${esc(n)}">${esc(n)}</button>`).join('');
+    $('guideTabs').onclick = (e) => { const b = e.target.closest('button'); if (b) show(b.dataset.n); };
+    show('Python');
+    $('guideDlg').showModal();
+  }
+
+  function refresh() { $('status').textContent = ''; loadProviders(); loadLogs(); loadCatalog(); loadKeys(); }
+  refresh();
+  setInterval(loadProviders, 15000);
+</script>
+</body>
+</html>

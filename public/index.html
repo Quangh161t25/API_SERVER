@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trợ lý AI</title>
+<style>
+  :root {
+    --bg:#f4f5f7; --panel:#ffffff; --text:#1c2230; --muted:#6b7280; --line:#e2e5ea;
+    --accent:#3155a6; --accent-soft:#e8eefb; --ok:#18794e; --err:#c0392b; --bubble:#eef1f6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#121419; --panel:#1b1e25; --text:#e6e8ec; --muted:#9aa1ad; --line:#2c3039;
+            --accent:#86a6ec; --accent-soft:#232c40; --ok:#4cc38a; --err:#ff7b6b; --bubble:#242833; }
+  }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body { margin:0; font:15px/1.55 system-ui, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--text); }
+  header { position:sticky; top:0; z-index:5; background:var(--panel); border-bottom:1px solid var(--line); }
+  .bar { max-width:980px; margin:0 auto; padding:10px 16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .brand { font-weight:700; font-size:17px; margin-right:auto; }
+  nav { display:flex; gap:4px; overflow-x:auto; }
+  @media (max-width:640px) { nav { order:3; width:100%; } }
+  nav button { background:transparent; color:var(--muted); border:0; padding:8px 12px; border-radius:8px; font:inherit; cursor:pointer; white-space:nowrap; }
+  nav button.active { background:var(--accent-soft); color:var(--accent); font-weight:600; }
+  main { max-width:980px; margin:0 auto; padding:16px; }
+  section { display:none; } section.active { display:block; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:14px; }
+  label { display:block; font-size:13px; color:var(--muted); margin-bottom:4px; }
+  input, select, textarea { width:100%; font:inherit; color:inherit; background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
+  textarea { resize:vertical; min-height:120px; }
+  input:focus, select:focus, textarea:focus { outline:2px solid var(--accent); outline-offset:-1px; }
+  button.btn { font:inherit; background:var(--accent); color:#fff; border:0; border-radius:8px; padding:8px 16px; cursor:pointer; }
+  button.btn:disabled { opacity:.55; cursor:default; }
+  button.ghost { font:inherit; background:transparent; color:var(--accent); border:1px solid var(--line); border-radius:8px; padding:7px 12px; cursor:pointer; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; }
+  .row > * { flex:1 1 160px; }
+  .row > .shrink { flex:0 0 auto; }
+  .actions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px; }
+  .meta { font-size:12px; color:var(--muted); }
+  .err { color:var(--err); font-size:14px; }
+  .out { white-space:pre-wrap; word-break:break-word; min-height:120px; background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:10px; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:720px) { .grid2 { grid-template-columns:1fr; } }
+
+  /* Chat */
+  #chat .panel { display:flex; flex-direction:column; height:calc(100vh - 150px); min-height:420px; padding:0; }
+  #msgs { flex:1; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:12px; }
+  .msg { max-width:85%; padding:9px 13px; border-radius:12px; white-space:pre-wrap; word-break:break-word; }
+  .msg.user { align-self:flex-end; background:var(--accent); color:#fff; border-bottom-right-radius:4px; }
+  .msg.assistant { align-self:flex-start; background:var(--bubble); border-bottom-left-radius:4px; }
+  .msg.error { align-self:center; background:transparent; color:var(--err); font-size:14px; }
+  .msg .tools { margin-top:6px; display:flex; gap:10px; font-size:12px; color:var(--muted); }
+  .msg .tools a { color:var(--accent); cursor:pointer; text-decoration:none; }
+  .composer { border-top:1px solid var(--line); padding:10px; display:flex; gap:8px; align-items:flex-end; }
+  .composer textarea { min-height:44px; max-height:200px; }
+  .empty { margin:auto; text-align:center; color:var(--muted); max-width:420px; }
+  details summary { cursor:pointer; color:var(--muted); font-size:13px; padding:10px 14px 0; }
+  details > div { padding:6px 14px 0; }
+
+  .chips { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
+  .chip { font-size:12px; border:1px solid var(--line); border-radius:999px; padding:3px 10px; cursor:pointer; background:transparent; color:var(--text); }
+  .audio-item { border-top:1px solid var(--line); padding:10px 0; }
+  .audio-item:first-child { border-top:0; }
+  audio { width:100%; margin-top:6px; }
+  dialog { border:1px solid var(--line); border-radius:12px; background:var(--panel); color:var(--text); width:min(420px, calc(100% - 32px)); }
+  dialog::backdrop { background:rgba(0,0,0,.4); }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="brand">Trợ lý AI</div>
+    <nav id="tabs">
+      <button data-tab="chat" class="active">💬 Chat</button>
+      <button data-tab="translate">🌐 Dịch</button>
+      <button data-tab="content">✍️ Viết content</button>
+      <button data-tab="tts">🔊 Giọng đọc</button>
+    </nav>
+    <span class="meta" id="modelBadge" style="cursor:pointer" title="Bấm để đổi"></span>
+    <button class="ghost" id="openSettings" title="Cài đặt">⚙</button>
+  </div>
+</header>
+
+<main>
+  <!-- CHAT -->
+  <section id="chat" class="active">
+    <div class="panel">
+      <details id="sysBox">
+        <summary>Tùy chỉnh vai trò của trợ lý (system prompt)</summary>
+        <div>
+          <textarea id="system" style="min-height:60px" placeholder="Ví dụ: Bạn là giáo viên tiếng Anh, luôn trả lời ngắn gọn và sửa lỗi ngữ pháp cho tôi."></textarea>
+          <div class="meta" style="margin:4px 0 8px">Áp dụng cho cuộc trò chuyện hiện tại. Tạo cuộc trò chuyện mới để đổi hẳn vai trò.</div>
+        </div>
+      </details>
+      <div id="msgs"></div>
+      <div class="composer">
+        <button class="ghost shrink" id="newChat" title="Cuộc trò chuyện mới">＋</button>
+        <textarea id="chatInput" rows="1" placeholder="Nhập tin nhắn... (Enter để gửi, Shift+Enter xuống dòng)"></textarea>
+        <button class="btn shrink" id="chatSend">Gửi</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- DỊCH -->
+  <section id="translate">
+    <div class="panel">
+      <div class="row">
+        <div><label>Từ</label><select id="trFrom"></select></div>
+        <button class="ghost shrink" id="trSwap" title="Đổi chiều" style="margin-bottom:1px">⇄</button>
+        <div><label>Sang</label><select id="trTo"></select></div>
+        <div><label>Phong cách</label><select id="trStyle"></select></div>
+      </div>
+      <div class="grid2" style="margin-top:12px">
+        <div>
+          <textarea id="trText" style="min-height:220px" placeholder="Nhập văn bản cần dịch... (Ctrl+Enter để dịch)"></textarea>
+          <div class="meta" id="trCount">0 ký tự</div>
+        </div>
+        <div><div class="out" id="trOut" style="min-height:220px"></div><div class="meta" id="trMeta"></div></div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="trGo">Dịch</button>
+        <button class="ghost" data-copy="trOut">Sao chép</button>
+        <button class="ghost" data-speak="trOut">🔊 Đọc bản dịch</button>
+        <span class="err" id="trErr"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- CONTENT -->
+  <section id="content">
+    <div class="panel">
+      <label>Chủ đề / sản phẩm / nội dung cần viết lại</label>
+      <textarea id="ctTopic" style="min-height:90px" placeholder="Ví dụ: Quán cà phê sân vườn mới mở ở Đà Lạt, giảm 20% tuần đầu khai trương"></textarea>
+      <div class="row" style="margin-top:10px">
+        <div><label>Loại nội dung</label><select id="ctKind"></select></div>
+        <div><label>Giọng văn</label><select id="ctTone"></select></div>
+        <div><label>Độ dài</label><select id="ctLength"></select></div>
+        <div><label>Ngôn ngữ</label><select id="ctLang"></select></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div><label>Từ khóa (tùy chọn)</label><input id="ctKeywords" placeholder="cà phê Đà Lạt, view đẹp"></div>
+        <div><label>Đối tượng (tùy chọn)</label><input id="ctAudience" placeholder="giới trẻ 18-30 tuổi"></div>
+      </div>
+      <div style="margin-top:10px"><label>Yêu cầu thêm (tùy chọn)</label><input id="ctExtra" placeholder="Có số điện thoại 0909 xxx xxx ở cuối bài"></div>
+      <div class="actions">
+        <button class="btn" id="ctGo">Viết</button>
+        <span class="err" id="ctErr"></span>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="out" id="ctOut"></div>
+      <div class="actions">
+        <button class="ghost" data-copy="ctOut">Sao chép</button>
+        <button class="ghost" id="ctAgain">↻ Viết phiên bản khác</button>
+        <button class="ghost" data-speak="ctOut">🔊 Đọc</button>
+        <span class="meta" id="ctMeta"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- GIỌNG ĐỌC -->
+  <section id="tts">
+    <div class="panel">
+      <label>Văn bản cần đọc</label>
+      <textarea id="ttsText" style="min-height:150px" placeholder="Nhập văn bản..."></textarea>
+      <div class="meta" id="ttsCount">0 ký tự</div>
+      <div class="row" style="margin-top:10px">
+        <div><label>Giọng</label><select id="ttsVoice"></select></div>
+        <div><label>Model giọng đọc</label><select id="ttsModel"><option value="">Mặc định</option></select></div>
+        <div style="flex:2 1 260px"><label>Cách đọc (tùy chọn)</label><input id="ttsStyle" placeholder="Ví dụ: Đọc chậm rãi, truyền cảm"></div>
+      </div>
+      <div class="chips" id="ttsChips"></div>
+      <div class="actions">
+        <button class="btn" id="ttsGo">Tạo giọng đọc</button>
+        <span class="err" id="ttsErr"></span>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="meta" id="ttsEmpty">Các file âm thanh đã tạo sẽ hiện ở đây.</div>
+      <div id="ttsList"></div>
+    </div>
+  </section>
+</main>
+
+<dialog id="settings">
+  <h3 style="margin-top:0">Cài đặt</h3>
+  <label>API key của server</label>
+  <input id="apiKey" type="password" placeholder="Để trống nếu server không đặt key">
+  <div style="margin-top:10px"><label>Cách chọn AI</label>
+    <select id="strategy"><option value="random">Ngẫu nhiên đều</option><option value="weighted">Theo trọng số</option><option value="roundrobin">Lần lượt</option></select>
+  </div>
+  <div style="margin-top:10px"><label>API (key)</label>
+    <select id="setProvider"><option value="">Tất cả (ngẫu nhiên)</option></select>
+  </div>
+  <div style="margin-top:10px"><label>Model <span id="setModelCount"></span></label>
+    <div class="row" style="flex-wrap:nowrap;gap:6px">
+      <input id="setModelFilter" placeholder="lọc..." style="flex:0 0 90px">
+      <select id="setModel"><option value="">Mặc định</option></select>
+    </div>
+  </div>
+  <div class="actions" style="justify-content:flex-end">
+    <a href="/admin.html" class="meta" style="margin-right:auto">Trang quản trị →</a>
+    <button class="btn" id="saveSettings">Lưu</button>
+  </div>
+</dialog>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+const store = {
+  get(k, d = '') { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} },
+};
+
+// ---------- Gọi server ----------
+function headers() { return { 'Content-Type': 'application/json', 'x-api-key': store.get('apiKey') }; }
+function common() {
+  const o = { strategy: store.get('strategy', 'random') };
+  const p = store.get('provider'), m = store.get('model');
+  if (p) o.provider = p;
+  if (m) o.model = m;
+  return o;
+}
+async function post(path, body) {
+  const res = await fetch(path, { method: 'POST', headers: headers(), body: JSON.stringify({ ...common(), ...body }) });
+  const data = await res.json().catch(() => ({ error: 'Phản hồi không hợp lệ' }));
+  if (!res.ok) throw new Error(explain(res.status, data));
+  return data;
+}
+function explain(status, data) {
+  if (status === 401) return 'Sai API key. Bấm ⚙ để nhập key.';
+  if (status === 429) return data.error || 'Gửi quá nhanh, đợi một chút.';
+  let msg = data.error || `Lỗi ${status}`;
+  if (data.errors?.length) msg += ' — ' + data.errors.map((e) => `${e.provider}: ${e.error}`).join(' | ');
+  return msg;
+}
+const metaText = (d) => d.provider ? `${d.provider.name} · ${d.provider.model || d.provider.type} · ${(d.latency_ms / 1000).toFixed(1)}s` + (d.attempts > 1 ? ` · thử ${d.attempts} lần` : '') : '';
+const fmt = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+
+// ---------- Tabs ----------
+function showTab(name) {
+  document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('section').forEach((s) => s.classList.toggle('active', s.id === name));
+  store.set('tab', name);
+}
+$('tabs').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) showTab(b.dataset.tab); });
+
+// ---------- Cài đặt ----------
+$('openSettings').onclick = () => {
+  $('apiKey').value = store.get('apiKey');
+  $('strategy').value = store.get('strategy', 'random');
+  $('setProvider').value = store.get('provider');
+  $('setModelFilter').value = '';
+  renderSetModels(store.get('model'));
+  $('settings').showModal();
+};
+$('saveSettings').onclick = () => {
+  store.set('apiKey', $('apiKey').value.trim());
+  store.set('strategy', $('strategy').value);
+  store.set('provider', $('setProvider').value);
+  store.set('model', $('setModel').value);
+  showModelBadge();
+  $('settings').close();
+  loadOptions();
+};
+
+// ---------- Sao chép / đọc ----------
+document.addEventListener('click', async (e) => {
+  const c = e.target.closest('[data-copy]');
+  if (c) {
+    await navigator.clipboard.writeText($(c.dataset.copy).innerText).catch(() => {});
+    const t = c.textContent; c.textContent = 'Đã chép ✓'; setTimeout(() => (c.textContent = t), 1200);
+  }
+  const s = e.target.closest('[data-speak]');
+  if (s) speakText($(s.dataset.speak).innerText);
+});
+function speakText(text) {
+  if (!text.trim()) return;
+  showTab('tts');
+  $('ttsText').value = text;
+  updateCount('ttsText', 'ttsCount');
+  makeTTS();
+}
+
+// ---------- Chat ----------
+let sessionId = store.get('sessionId');
+let sending = false;
+
+function addMsg(role, text, meta) {
+  const empty = $('msgs').querySelector('.empty'); if (empty) empty.remove();
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  div.innerHTML = fmt(text);
+  if (role === 'assistant') {
+    const tools = document.createElement('div');
+    tools.className = 'tools';
+    tools.innerHTML = `<span>${esc(meta || '')}</span><a data-act="copy">Sao chép</a><a data-act="speak">🔊 Đọc</a>`;
+    tools.addEventListener('click', (e) => {
+      const act = e.target.dataset.act;
+      if (act === 'copy') navigator.clipboard.writeText(text).catch(() => {});
+      if (act === 'speak') speakText(text);
+    });
+    div.appendChild(tools);
+  }
+  $('msgs').appendChild(div);
+  $('msgs').scrollTop = $('msgs').scrollHeight;
+  return div;
+}
+function emptyChat() {
+  $('msgs').innerHTML = '<div class="empty"><h3 style="margin:0 0 6px">Xin chào 👋</h3>Hỏi bất cứ điều gì. Trợ lý nhớ nội dung trong cùng một cuộc trò chuyện.</div>';
+}
+async function restoreChat() {
+  emptyChat();
+  if (!sessionId) return;
+  try {
+    const res = await fetch('/api/sessions/' + encodeURIComponent(sessionId), { headers: headers() });
+    if (!res.ok) { sessionId = ''; store.del('sessionId'); return; }
+    const s = await res.json();
+    $('system').value = s.system || '';
+    if (s.system) $('sysBox').open = true;
+    s.messages.forEach((m) => addMsg(m.role, m.content));
+  } catch {}
+}
+async function sendChat() {
+  const text = $('chatInput').value.trim();
+  if (!text || sending) return;
+  sending = true; $('chatSend').disabled = true;
+  $('chatInput').value = ''; autosize();
+  addMsg('user', text);
+  const wait = addMsg('assistant', '…');
+  try {
+    const d = await post('/api/chat', { message: text, session_id: sessionId || undefined, system: $('system').value.trim() });
+    sessionId = d.session_id; store.set('sessionId', sessionId);
+    wait.remove();
+    addMsg('assistant', d.text || '(không có nội dung)', metaText(d));
+  } catch (err) {
+    wait.remove();
+    addMsg('error', err.message);
+  } finally {
+    sending = false; $('chatSend').disabled = false; $('chatInput').focus();
+  }
+}
+function autosize() { const t = $('chatInput'); t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 200) + 'px'; }
+$('chatInput').addEventListener('input', autosize);
+$('chatInput').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendChat(); } });
+$('chatSend').onclick = sendChat;
+$('newChat').onclick = () => {
+  if (sessionId) fetch('/api/sessions/' + encodeURIComponent(sessionId), { method: 'DELETE', headers: headers() }).catch(() => {});
+  sessionId = ''; store.del('sessionId'); $('system').value = ''; emptyChat(); $('chatInput').focus();
+};
+
+// ---------- Dịch ----------
+function updateCount(input, label) { $(label).textContent = $(input).value.length.toLocaleString('vi-VN') + ' ký tự'; }
+$('trText').addEventListener('input', () => updateCount('trText', 'trCount'));
+$('trText').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.ctrlKey) doTranslate(); });
+$('trSwap').onclick = () => {
+  if ($('trFrom').value === 'auto') return;
+  [$('trFrom').value, $('trTo').value] = [$('trTo').value, $('trFrom').value];
+  if ($('trOut').innerText.trim()) { $('trText').value = $('trOut').innerText; $('trOut').textContent = ''; updateCount('trText', 'trCount'); }
+};
+async function doTranslate() {
+  const text = $('trText').value.trim();
+  if (!text) return;
+  $('trGo').disabled = true; $('trErr').textContent = ''; $('trOut').textContent = 'Đang dịch...'; $('trMeta').textContent = '';
+  ['trFrom', 'trTo', 'trStyle'].forEach((k) => store.set(k, $(k).value));
+  try {
+    const d = await post('/api/translate', { text, from: $('trFrom').value, to: $('trTo').value, style: $('trStyle').value });
+    $('trOut').textContent = d.text; $('trMeta').textContent = metaText(d);
+  } catch (err) { $('trOut').textContent = ''; $('trErr').textContent = err.message; }
+  $('trGo').disabled = false;
+}
+$('trGo').onclick = doTranslate;
+
+// ---------- Content ----------
+async function doContent() {
+  const topic = $('ctTopic').value.trim();
+  if (!topic) { $('ctTopic').focus(); return; }
+  $('ctGo').disabled = $('ctAgain').disabled = true; $('ctErr').textContent = ''; $('ctOut').textContent = 'Đang viết...'; $('ctMeta').textContent = '';
+  ['ctKind', 'ctTone', 'ctLength', 'ctLang'].forEach((k) => store.set(k, $(k).value));
+  try {
+    const d = await post('/api/content', {
+      topic, kind: $('ctKind').value, tone: $('ctTone').value, length: $('ctLength').value, language: $('ctLang').value,
+      keywords: $('ctKeywords').value, audience: $('ctAudience').value, extra: $('ctExtra').value,
+    });
+    $('ctOut').innerHTML = fmt(d.text); $('ctMeta').textContent = metaText(d);
+  } catch (err) { $('ctOut').textContent = ''; $('ctErr').textContent = err.message; }
+  $('ctGo').disabled = $('ctAgain').disabled = false;
+}
+$('ctGo').onclick = doContent;
+$('ctAgain').onclick = doContent;
+
+// ---------- Giọng đọc ----------
+const STYLE_PRESETS = ['Đọc tự nhiên, rõ ràng', 'Đọc chậm rãi, truyền cảm', 'Đọc vui vẻ, hào hứng', 'Giọng đọc tin tức', 'Kể chuyện cho trẻ em', 'Thì thầm nhẹ nhàng'];
+$('ttsChips').innerHTML = STYLE_PRESETS.map((s) => `<button class="chip" type="button">${esc(s)}</button>`).join('');
+$('ttsChips').addEventListener('click', (e) => { if (e.target.classList.contains('chip')) $('ttsStyle').value = e.target.textContent; });
+$('ttsText').addEventListener('input', () => updateCount('ttsText', 'ttsCount'));
+async function makeTTS() {
+  const text = $('ttsText').value.trim();
+  if (!text) return;
+  $('ttsGo').disabled = true; $('ttsErr').textContent = 'Đang tạo giọng đọc...';
+  store.set('ttsVoice', $('ttsVoice').value); store.set('ttsModel', $('ttsModel').value);
+  try {
+    const res = await fetch('/api/tts', {
+      method: 'POST', headers: headers(),
+      body: JSON.stringify({ strategy: store.get('strategy', 'random'), text, voice: $('ttsVoice').value, style: $('ttsStyle').value.trim(), model: $('ttsModel').value || undefined }),
+    });
+    if (!res.ok) throw new Error(explain(res.status, await res.json().catch(() => ({}))));
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const item = document.createElement('div');
+    item.className = 'audio-item';
+    const time = new Date().toLocaleTimeString('vi-VN');
+    item.innerHTML = `<div class="meta">${esc(time)} · Giọng ${esc($('ttsVoice').value)} · ${esc(res.headers.get('X-Provider') || '')} · ${(Number(res.headers.get('X-Latency-Ms')) / 1000).toFixed(1)}s</div>
+      <div>${esc(text.length > 140 ? text.slice(0, 140) + '…' : text)}</div>
+      <audio controls src="${url}"></audio>
+      <div><a class="meta" href="${url}" download="giong-doc-${Date.now()}.wav">⬇ Tải file WAV</a></div>`;
+    $('ttsList').prepend(item);
+    $('ttsEmpty').style.display = 'none';
+    item.querySelector('audio').play().catch(() => {});
+    $('ttsErr').textContent = '';
+  } catch (err) { $('ttsErr').textContent = err.message; }
+  $('ttsGo').disabled = false;
+}
+$('ttsGo').onclick = makeTTS;
+
+// ---------- Nạp lựa chọn từ server ----------
+function fill(sel, obj, saved, def) {
+  $(sel).innerHTML = Object.entries(obj).map(([k, v]) => `<option value="${esc(k)}">${esc(v)}</option>`).join('');
+  $(sel).value = store.get(saved) || def;
+  if (!$(sel).value) $(sel).value = def;
+}
+async function loadOptions() {
+  try {
+    const res = await fetch('/api/options', { headers: headers() });
+    if (res.status === 401) { $('openSettings').click(); return; }
+    const o = await res.json();
+    const langs = { ...o.languages }; delete langs.auto;
+    fill('trFrom', o.languages, 'trFrom', 'auto');
+    fill('trTo', langs, 'trTo', 'vi');
+    fill('trStyle', Object.fromEntries(Object.keys(o.translate_styles).map((k) => [k, {
+      natural: 'Tự nhiên', literal: 'Sát nghĩa', formal: 'Trang trọng', casual: 'Thân mật', technical: 'Chuyên ngành' }[k] || k])), 'trStyle', 'natural');
+    fill('ctKind', Object.fromEntries(Object.keys(o.content_kinds).map((k) => [k, {
+      facebook: 'Bài Facebook', tiktok: 'Kịch bản TikTok/Reels', blog: 'Bài blog', seo: 'Bài chuẩn SEO', ads: 'Quảng cáo',
+      product: 'Mô tả sản phẩm', email: 'Email', caption: 'Caption ngắn', idea: 'Ý tưởng nội dung', rewrite: 'Viết lại cho hay hơn' }[k] || k])), 'ctKind', 'facebook');
+    fill('ctTone', Object.fromEntries(Object.entries(o.content_tones).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)])), 'ctTone', 'friendly');
+    fill('ctLength', Object.fromEntries(Object.entries(o.content_lengths).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)])), 'ctLength', 'medium');
+    fill('ctLang', langs, 'ctLang', 'vi');
+    fill('ttsVoice', Object.fromEntries(o.voices.map((v) => [v.name, `${v.name} — ${v.desc}`])), 'ttsVoice', 'Kore');
+  } catch {}
+}
+
+// ---------- API & model ----------
+let cat = { providers: [], models: [], tts_model: '' };
+async function loadCatalog() {
+  try {
+    const res = await fetch('/api/catalog', { headers: headers() });
+    if (!res.ok) return;
+    cat = await res.json();
+    $('setProvider').innerHTML = '<option value="">Tất cả (ngẫu nhiên)</option>' + cat.providers.filter((p) => p.enabled)
+      .map((p) => `<option value="${esc(p.id)}">${esc(p.name || p.id)} (${esc(p.type)})</option>`).join('');
+    $('setProvider').value = store.get('provider');
+    if ($('setProvider').value !== store.get('provider')) store.set('provider', '');
+    const tts = cat.models.filter((m) => m.tts);
+    $('ttsModel').innerHTML = `<option value="">Mặc định (${esc(cat.tts_model)})</option>` + tts.map((m) => `<option>${esc(m.id)}</option>`).join('');
+    $('ttsModel').value = store.get('ttsModel');
+    showModelBadge();
+  } catch {}
+}
+function renderSetModels(selected) {
+  const pid = $('setProvider').value;
+  const q = $('setModelFilter').value.trim().toLowerCase();
+  const all = cat.models.filter((m) => !m.tts && (!pid || m.providers.includes(pid)));
+  const list = all.filter((m) => !q || m.id.toLowerCase().includes(q));
+  $('setModelCount').textContent = `(${list.length}/${all.length})`;
+  $('setModel').innerHTML = '<option value="">Mặc định của từng API</option>' + list.map((m) => `<option>${esc(m.id)}</option>`).join('');
+  $('setModel').value = list.some((m) => m.id === selected) ? selected : (q && list[0] ? list[0].id : '');
+}
+$('setProvider').onchange = () => renderSetModels($('setModel').value);
+$('setModelFilter').oninput = () => renderSetModels($('setModel').value);
+function showModelBadge() {
+  const p = store.get('provider'), m = store.get('model');
+  $('modelBadge').textContent = (p || m) ? `${p || 'Tất cả API'} · ${m || 'model mặc định'}` : '';
+}
+$('modelBadge').onclick = () => $('openSettings').click();
+
+showTab(store.get('tab', 'chat'));
+loadOptions().then(() => { restoreChat(); loadCatalog(); });
+</script>
+</body>
+</html>
